@@ -5,7 +5,6 @@ import logging
 import smtplib
 import time
 from email.message import EmailMessage
-from email.utils import parseaddr
 
 import httpx
 
@@ -48,24 +47,36 @@ def _send_gmail(
         message.add_alternative(html, subtype="html")
 
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=settings.email_http_timeout) as smtp:
+        with smtplib.SMTP(
+            "smtp.gmail.com",
+            587,
+            timeout=settings.email_http_timeout,
+        ) as smtp:
+            smtp.ehlo()
             smtp.starttls()
+            smtp.ehlo()
             smtp.login(sender, password)
             smtp.send_message(message)
 
     except smtplib.SMTPAuthenticationError as exc:
+        logger.exception("Gmail SMTP authentication failed")
         raise EmailSendError(
-            "Gmail authentication failed; check GMAIL_EMAIL and the App Password",
+            "Gmail authentication failed; check GMAIL_EMAIL and GMAIL_APP_PASSWORD",
             permanent=True,
         ) from exc
+
     except smtplib.SMTPRecipientsRefused as exc:
+        logger.exception("Gmail refused the recipient")
         raise EmailSendError(
             "Gmail refused the recipient address",
             permanent=True,
         ) from exc
+
     except (smtplib.SMTPException, OSError, TimeoutError) as exc:
+        # Log the underlying exception to diagnose network and SMTP failures.
+        logger.exception("Gmail SMTP connection or delivery failed")
         raise EmailSendError(
-            f"Gmail SMTP error: {type(exc).__name__}"
+            f"Gmail SMTP error: {type(exc).__name__}: {exc}"
         ) from exc
 
 
@@ -83,12 +94,13 @@ def send_email(
         # Used only for tests and load tests.
         if settings.email_mock_latency_ms:
             time.sleep(settings.email_mock_latency_ms / 1000)
-        logger.info("mock email -> %s | %s", to_email, subject)
+
+        logger.info("Mock email -> %s | %s", to_email, subject)
         return
 
     if provider == "gmail":
         _send_gmail(to_email, subject, text, html)
-        logger.info("email sent through Gmail -> %s | %s", to_email, subject)
+        logger.info("Email sent through Gmail -> %s | %s", to_email, subject)
         return
 
     if provider != "resend":
@@ -98,9 +110,14 @@ def send_email(
         )
 
     if not settings.resend_api_key:
-        raise EmailSendError("RESEND_API_KEY is not configured", permanent=True)
+        raise EmailSendError(
+            "RESEND_API_KEY is not configured",
+            permanent=True,
+        )
 
-    headers = {"Authorization": f"Bearer {settings.resend_api_key}"}
+    headers = {
+        "Authorization": f"Bearer {settings.resend_api_key}",
+    }
 
     if idempotency_key:
         headers["Idempotency-Key"] = idempotency_key
@@ -121,8 +138,9 @@ def send_email(
             timeout=settings.email_http_timeout,
         )
     except httpx.HTTPError as exc:
+        logger.exception("Resend network request failed")
         raise EmailSendError(
-            f"Resend network error: {type(exc).__name__}"
+            f"Resend network error: {type(exc).__name__}: {exc}"
         ) from exc
 
     if response.status_code >= 400:
@@ -130,9 +148,14 @@ def send_email(
             response.status_code < 500
             and response.status_code not in (408, 429)
         )
+        logger.error(
+            "Resend returned HTTP %s: %s",
+            response.status_code,
+            response.text[:200],
+        )
         raise EmailSendError(
             f"Resend returned {response.status_code}: {response.text[:200]}",
             permanent=permanent,
         )
 
-    logger.info("email sent through Resend -> %s | %s", to_email, subject)
+    logger.info("Email sent through Resend -> %s | %s", to_email, subject)
