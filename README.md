@@ -1,3 +1,5 @@
+Organizers invitecode: Ml8vEHSXK5sEqN8rOLEUNf9gdS-gkDNX
+
 # Event Booking System (FastAPI + PostgreSQL)
 
 A simplified BookMyShow-style backend. **Organizers** create and manage events, **customers** browse and book tickets,
