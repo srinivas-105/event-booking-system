@@ -1,3 +1,4 @@
+
 """All configuration comes from environment variables (or a local .env file)."""
 from functools import lru_cache
 
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
     organizer_invite_code: str = ""
 
     # booking behaviour
-    booking_mode: str = "optimized"  # "baseline" (naive, for the load-test comparison) | "optimized"
+    booking_mode: str = "optimized"
     max_tickets_per_booking: int = 10
 
     # performance knobs
@@ -28,15 +29,17 @@ class Settings(BaseSettings):
     db_max_overflow: int = 10
     db_pool_timeout: int = 30
     threadpool_size: int = 40
-    # Max requests being processed at once. 0 = automatic: db_pool_size + db_max_overflow - 2
-    # (two connections are reserved for the email worker and health checks). Extra requests wait in the
-    # event loop instead of tying up threads while waiting for a DB connection.
     max_concurrent_requests: int = 0
 
     # email
-    email_provider: str = "resend"  # "resend" | "mock"
+    email_provider: str = "resend"  # "resend" | "gmail" | "mock"
     resend_api_key: str = ""
     email_from: str = "Event Booking Team <onboarding@resend.dev>"
+
+    # Gmail SMTP credentials
+    gmail_email: str = ""
+    gmail_app_password: str = ""
+
     email_mock_latency_ms: int = 0
     email_http_timeout: float = 10.0
     run_email_worker: bool = True
@@ -64,12 +67,17 @@ class Settings(BaseSettings):
     def _validate(self) -> "Settings":
         if self.booking_mode not in {"baseline", "optimized"}:
             raise ValueError("BOOKING_MODE must be 'baseline' or 'optimized'")
-        if self.email_provider not in {"resend", "mock"}:
-            raise ValueError("EMAIL_PROVIDER must be 'resend' or 'mock'")
+
+        if self.email_provider not in {"resend", "gmail", "mock"}:
+            raise ValueError("EMAIL_PROVIDER must be 'resend', 'gmail', or 'mock'")
+
         if self.environment != "development" and (
             self.secret_key == DEV_SECRET or len(self.secret_key) < 32
         ):
-            raise ValueError("SECRET_KEY must be a random string of 32+ characters outside development")
+            raise ValueError(
+                "SECRET_KEY must be a random string of 32+ characters outside development"
+            )
+
         return self
 
 
