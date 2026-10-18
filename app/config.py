@@ -1,5 +1,6 @@
 
 """All configuration comes from environment variables (or a local .env file)."""
+
 from functools import lru_cache
 
 from pydantic import model_validator
@@ -11,7 +12,7 @@ DEV_SECRET = "dev-only-change-me"
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # core
+    # Core
     environment: str = "development"
     database_url: str = "sqlite:///./event_booking.db"
     secret_key: str = DEV_SECRET
@@ -20,26 +21,33 @@ class Settings(BaseSettings):
     bcrypt_rounds: int = 12
     organizer_invite_code: str = ""
 
-    # booking behaviour
+    # Booking behaviour
     booking_mode: str = "optimized"
     max_tickets_per_booking: int = 10
 
-    # performance knobs
+    # Performance
     db_pool_size: int = 10
     db_max_overflow: int = 10
     db_pool_timeout: int = 30
     threadpool_size: int = 40
     max_concurrent_requests: int = 0
 
-    # email
-    email_provider: str = "resend"  # "resend" | "gmail" | "mock"
+    # Email providers: resend, gmail, gmail_api, mock
+    email_provider: str = "resend"
     resend_api_key: str = ""
     email_from: str = "Event Booking Team <onboarding@resend.dev>"
 
-    # Gmail SMTP credentials
+    # Gmail SMTP (not suitable for Render free instances)
     gmail_email: str = ""
     gmail_app_password: str = ""
 
+    # Gmail API OAuth credentials
+    gmail_client_id: str = ""
+    gmail_client_secret: str = ""
+    gmail_refresh_token: str = ""
+    gmail_sender: str = ""
+
+    # Email worker
     email_mock_latency_ms: int = 0
     email_http_timeout: float = 10.0
     run_email_worker: bool = True
@@ -55,7 +63,7 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_url(self) -> str:
-        """Render hands out postgres:// URLs; SQLAlchemy needs postgresql+psycopg2://."""
+        """Normalize Render PostgreSQL URLs for SQLAlchemy."""
         url = self.database_url
         if url.startswith("postgres://"):
             url = "postgresql://" + url[len("postgres://"):]
@@ -68,8 +76,10 @@ class Settings(BaseSettings):
         if self.booking_mode not in {"baseline", "optimized"}:
             raise ValueError("BOOKING_MODE must be 'baseline' or 'optimized'")
 
-        if self.email_provider not in {"resend", "gmail", "mock"}:
-            raise ValueError("EMAIL_PROVIDER must be 'resend', 'gmail', or 'mock'")
+        if self.email_provider not in {"resend", "gmail", "gmail_api", "mock"}:
+            raise ValueError(
+                "EMAIL_PROVIDER must be 'resend', 'gmail', 'gmail_api', or 'mock'"
+            )
 
         if self.environment != "development" and (
             self.secret_key == DEV_SECRET or len(self.secret_key) < 32
