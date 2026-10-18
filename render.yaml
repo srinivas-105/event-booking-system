@@ -1,0 +1,36 @@
+# Render Blueprint: New + > Blueprint > pick this repo. It creates the web service AND the PostgreSQL database.
+databases:
+  - name: event-booking-db
+    plan: free
+    databaseName: event_booking
+    user: event_booking
+
+services:
+  - type: web
+    name: event-booking-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: event-booking-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: BOOKING_MODE
+        value: optimized
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false          # paste in the Render dashboard
+      - key: EMAIL_FROM
+        sync: false          # e.g. Event Booking Team <onboarding@resend.dev>
+      - key: ORGANIZER_INVITE_CODE
+        sync: false          # choose any secret string
